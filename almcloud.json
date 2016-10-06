@@ -1,0 +1,1048 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Parameters": {
+        "KeyName": {
+            "Description": "Name of aws keypair to be used",
+            "Type": "String",
+            "Default": "admin"
+        },
+        "ProxyHost": {
+            "Type": "String",
+            "Description": "The Proxy host that you require, this will be abstracted to a map function",
+            "Default": "192.168.1.1"
+        },
+        "Domain": {
+            "Type": "String",
+            "Description": "The domain for which you are deploying",
+            "Default": "example.com"
+        },
+        "Environment": {
+            "Type": "String",
+            "Description": "The Environment name for this stack",
+            "Default": "devops"
+        },
+        "ExtNetUuid": {
+            "Type": "String",
+            "Description": "The external id for the public subnet",
+            "Default": "####-####-####-####-####"
+        },
+        "PrivateNetId": {
+            "Type": "String",
+            "Description": "The external id for the public subnet",
+            "Default": "####-####-####-####-####"
+
+        },
+        "PrivateSubNetId": {
+            "Type": "String",
+            "Description": "The external subnet id for the public subnet",
+            "Default": "####-####-####-####-####"
+        },
+        "ImageName": {
+            "Type": "String",
+            "Description": "The name of the image you would like to use",
+            "Default": "rhel65-heat-cfn10"
+        },
+        "FreeIPAPassword" : {
+            "Type": "String",
+            "Description": "The Freeipa Password, this needs to be randomized at some stage",
+            "Default": "Fr33ipa!"
+        }
+    },
+    "Resources": {
+        "FreeIPAMasterSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Allows ssh connections to the agents",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "1",
+                        "ToPort": "65535",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "udp",
+                        "FromPort": "1",
+                        "ToPort": "65535",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "22",
+                        "ToPort": "22",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "88",
+                        "ToPort": "88",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "443",
+                        "ToPort": "443",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "389",
+                        "ToPort": "389",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "464",
+                        "ToPort": "464",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "53",
+                        "ToPort": "53",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "636",
+                        "ToPort": "636",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "80",
+                        "ToPort": "80",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "udp",
+                        "FromPort": "88",
+                        "ToPort": "88",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "udp",
+                        "FromPort": "464",
+                        "ToPort": "464",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "udp",
+                        "FromPort": "53",
+                        "ToPort": "53",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "udp",
+                        "FromPort": "123",
+                        "ToPort": "123",
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ]
+            }
+        },
+        "FreeIPAMasterInstance": {
+            "Type": "AWS::EC2::Instance",
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "bootstrap": [ "1" ],
+                        "all": [
+                            {
+                                "ConfigSet": "bootstrap"
+                            },
+                            "2",
+                            "3",
+                            "4"
+                        ],
+                        "default": [
+                            {
+                                "ConfigSet": "all"
+                            }
+                        ]
+                    },
+                    "1": {
+                        "files": {
+                            "/etc/puppetlabs/puppet/autosign.conf": {
+                                "content": "*"
+                            },
+                            "/etc/profile.d/visa_env.sh": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "export http_proxy=http://", {
+                                            "Ref": "ProxyHost"
+                                        }, ":3128\n",
+                                        "export https_proxy=http://", {
+                                            "Ref": "ProxyHost"
+                                        }, ":3128\n",
+                                        "export no_proxy='", "*.", {
+                                            "Ref": "Domain"
+                                        }, ",169.254.169.254,10.61.77.245'\n",
+                                        "export SUDO_FORCE_REMOVE=yes\n" ]
+                                    ]
+                                },
+                                "mode": "000644",
+                                "owner": "root",
+                                "group": "root"
+                            },
+                            "/etc/yum.conf": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "[main]\n",
+                                        "cachedir=/var/cache/yum/$basearch/$releasever\n",
+                                        "keepcache=0\n",
+                                        "debuglevel=2\n",
+                                        "logfile=/var/log/yum.log\n",
+                                        "http_caching=packages\n",
+                                        "exactarch=1\n",
+                                        "obsoletes=1\n",
+                                        "gpgcheck=1\n",
+                                        "plugins=1\n",
+                                        "installonly_limit=3\n",
+                                        "proxy=http://", {
+                                            "Ref": "ProxyHost"
+                                        }, ":3128\n" ]
+                                    ]
+                                },
+                                "mode": "000644",
+                                "owner": "root",
+                                "group": "root"
+                            },
+                            "/etc/yum.repos.d/centos-updates.repo": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "[centos-updates]\n",
+                                        "name=CentOS updates\n",
+                                        "baseurl=http://ftp.heanet.ie/pub/centos/6.5/updates/x86_64/\n",
+                                        "enabled=1\n",
+                                        "gpgcheck=0\n" ]
+                                    ]
+                                }
+                            },
+                            "/etc/yum.repos.d/centos-updates32.repo": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "[centos-updates32]\n",
+                                        "name=CentOS updates\n",
+                                        "baseurl=http://ftp.heanet.ie/pub/centos/6.5/updates/i386/\n",
+                                        "enabled=1\n",
+                                        "gpgcheck=0\n" ]
+                                    ]
+                                }
+                            },
+                            "/etc/yum.repos.d/puppetlabs.repo": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "[puppetlabs-products]\n",
+                                        "name=Puppet Labs Products El 6 - $basearch\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/products/$basearch\n",
+                                        "enabled=1\n",
+                                        "gpgcheck=0\n",
+
+                                        "[puppetlabs-deps]\n",
+                                        "name=Puppet Labs Dependencies El 6 - $basearch\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/dependencies/$basearch\n",
+                                        "enabled=1\n",
+                                        "gpgcheck=0\n",
+
+                                        "[puppetlabs-devel]\n",
+                                        "name=Puppet Labs Devel El 6 - $basearch\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/devel/$basearch\n",
+                                        "enabled=0\n",
+                                        "gpgcheck=0\n",
+
+                                        "[puppetlabs-products-source]\n",
+                                        "name=Puppet Labs Products El 6 - $basearch - Source\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/products/SRPMS\n",
+                                        "failovermethod=priority\n",
+                                        "enabled=0\n",
+                                        "gpgcheck=0\n",
+
+                                        "[puppetlabs-deps-source]\n",
+                                        "name=Puppet Labs Source Dependencies El 6 - $basearch - Source\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/dependencies/SRPMS\n",
+                                        "enabled=0\n",
+                                        "gpgcheck=0\n",
+
+                                        "[puppetlabs-devel-source]\n",
+                                        "name=Puppet Labs Devel El 6 - $basearch - Source\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/devel/SRPMS\n",
+                                        "enabled=0\n",
+                                        "gpgcheck=0\n" ]
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "2": {
+                        "commands": {
+                            "sourceprofile": {
+                                "command": ". /etc/profile.d/env.sh",
+                                "cwd": "~"
+                            }
+                        },
+                        "packages": {
+                            "yum": {
+                                "wget": [],
+                                "curl": [],
+                                "vim-enhanced": [],
+                                "patch": [],
+                                "bind-dyndb-ldap": [],
+                                "ipa-server": [],
+                                "sssd": [],
+                                "kstart": [],
+                                "openldap-clients": [],
+                                "puppet": [],
+                                "unzip": []
+                            }
+                        }
+                    },
+                    "3": {
+                        "commands": {
+                            "1sourceprofile": {
+                                "command": ". /etc/profile.d/env.sh",
+                                "cwd": "~"
+                            },
+
+                            "2sethostname": {
+                                "command": {
+                                    "Fn::Base64": {
+                                        "Fn::Join": ["", [
+                                            "export hostip=`curl -s http://169.254.169.254/latest/meta-data/local-ipv4` ; ",
+                                            "export instancehostname=`curl -s http://169.254.169.254/latest/meta-data/hostname | awk -F . '{print$1}'` ; ",
+                                            "sed -i '/1.2.3.4/d' /etc/hosts ; ",
+                                            "echo \"$hostip $instancehostname.", {
+                                                "Ref": "Domain"
+                                            }, " $instancehostname\" >> /etc/hosts ; ",
+                                            "hostname $instancehostname.", {
+                                                "Ref": "Domain"
+                                            }, " ; ",
+                                            "sed -i \"s/HOSTNAME=*.*/HOSTNAME=$instancehostname.", {
+                                                "Ref": "Domain"
+                                            }, "/g\" /etc/sysconfig/network"
+                                        ]]
+                                    }
+                                },
+                                "cwd": "~"
+                            },
+
+                            "3ipainstall": {
+                                "command": {
+                                    "Fn::Base64": {
+                                        "Fn::Join": ["", [
+                                            "/usr/sbin/ipa-server-install --hostname=`hostname` --realm=`echo ", {
+                                                "Ref": "Domain"
+                                            }, " | tr [a-z] [A-Z]` --domain=", {
+                                                "Ref": "Domain"
+                                            }, "  --admin-password=", {
+                                                "Ref": "FreeIPAPassword"
+                                            }, " --ds-password='fr33ipa!' --setup-dns --no-forwarders --unattended" ]]
+                                    }
+                                },
+                                "cwd": "~"
+                            }
+                        },
+
+                        "services": {
+                            "sysvinit": {
+                                "ipa": {
+                                    "enabled": "true",
+                                    "ensureRunning": "true"
+                                },
+                                "iptables": {
+                                    "enabled": "false",
+                                    "ensureRunning": "false"
+                                }
+
+                            }
+                        }
+                    },
+                    "4": {
+                        "commands": {
+                            "1sourceprofile": {
+                                "command": ". /etc/profile.d/visa_env.sh",
+                                "cwd": "~"
+                            },
+
+                            "2patchipa": {
+                                "command": {
+                                    "Fn::Base64": {
+                                        "Fn::Join": ["", [
+                                            "git clone https://gist.github.com/11343282.git /tmp/diff1 ; ",
+                                            "git clone https://gist.github.com/11343270.git /tmp/diff2 ; ",
+                                            "patch /usr/lib/python2.6/site-packages/ipalib/plugins/cert.py < /tmp/diff1/cert.py.diff ; ",
+                                            "patch /var/lib/pki-ca/profiles/ca/caIPAserviceCert.cfg < /tmp/diff2/caIPAserviceCert.cfg.diff ; ",
+                                            "service ipa restart\n",
+                                            "echo ", {
+                                                "Ref": "FreeIPAPassword"
+                                            }, " | kinit admin\n",
+                                            "domain=", {
+                                                "Ref": "Domain"
+                                            }, "\n",
+                                            "for serv in pe-internal-dashboard pe-internal-broker pe-internal-mcollective-servers pe-internal-peadmin-mcollective-client pe-internal-puppet-console-mcollective-client pe-internal-dashboard; do\n",
+                                            "ipa service-del $serv/puppet.", {
+                                                "Ref": "Domain"
+                                            }, "\n",
+                                            "ipa service-add $serv/puppet.", {
+                                                "Ref": "Domain"
+                                            }, "\n",
+                                            "done\n"
+
+                                        ]]
+                                    }
+                                },
+                                "cwd": "~"
+                            }
+                        }
+                    }
+                }
+            },
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubNetId"
+                },
+                "InstanceType": "m1.small",
+                "ImageId": {
+                    "Ref": "ImageName"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "SecurityGroups": [
+                    {
+                        "Ref": "FreeIPAMasterSecurityGroup"
+                    }, "consul-ConsulMasterSecurityGroup-escfha46sa4n"
+                ],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": ["", [
+                            "#!/bin/bash\n",
+
+                            "/opt/aws/bin/cfn-init -s ", {
+                                "Ref": "AWS::StackName"
+                            }, " -r FreeIPAMasterInstance", " -c default",
+                            "  --region ", {
+                                "Ref": "AWS::Region"
+                            }, " > /tmp/cfn-init.log 2>&1\n",
+                            "# Start up the cfn-hup daemon to listen for changes\n",
+                            "#/opt/aws/bin/cfn-hup || error_exit 'Failed to start cfn-hup'\n",
+                            "/opt/aws/bin/cfn-hup\n"] ]
+                    }
+                }
+            }
+        },
+        "FreeIPAMasterIPAddress": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "InstanceId": {
+                    "Ref": "FreeIPAMasterInstance"
+                }
+            }
+
+        },
+
+        "PuppetMasterSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Allows communication to the puppet master",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "8140",
+                        "ToPort": "8140",
+                        "SourceSecurityGroupName": {
+                            "Ref": "FreeIPAMasterSecurityGroup"
+                        }
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "8140",
+                        "ToPort": "8140",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "3000",
+                        "ToPort": "3000",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "3001",
+                        "ToPort": "3001",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "22",
+                        "ToPort": "22",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "8080",
+                        "ToPort": "8081",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "61613",
+                        "ToPort": "61613",
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ]
+            }
+        },
+        "PuppetMasterInstance": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": "FreeIPAMasterInstance",
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "bootstrap": [ "1" ],
+                        "all": [
+                            {
+                                "ConfigSet": "bootstrap"
+                            },
+                            "2",
+                            "3"
+                        ],
+                        "default": [
+                            {
+                                "ConfigSet": "all"
+                            }
+                        ]
+                    },
+                    "1": {
+                        "files": {
+                            "/etc/puppetlabs/puppet/autosign.conf": {
+                                "content": "*"
+                            },
+                            "/etc/profile.d/env.sh": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "export http_proxy=http://", {
+                                            "Ref": "ProxyHost"
+                                        }, ":3128\n",
+                                        "export https_proxy=http://", {
+                                            "Ref": "ProxyHost"
+                                        }, ":3128\n",
+                                        "export no_proxy='", "*.", {
+                                            "Ref": "Domain"
+                                        }, ",169.254.169.254,10.61.77.245'\n",
+                                        "export SUDO_FORCE_REMOVE=yes\n" ]
+                                    ]
+                                },
+                                "mode": "000644",
+                                "owner": "root",
+                                "group": "root"
+                            },
+                            "/etc/yum.conf": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "[main]\n",
+                                        "cachedir=/var/cache/yum/$basearch/$releasever\n",
+                                        "keepcache=0\n",
+                                        "debuglevel=2\n",
+                                        "logfile=/var/log/yum.log\n",
+                                        "http_caching=packages\n",
+                                        "exactarch=1\n",
+                                        "obsoletes=1\n",
+                                        "gpgcheck=1\n",
+                                        "plugins=1\n",
+                                        "installonly_limit=3\n",
+                                        "proxy=http://", {
+                                            "Ref": "ProxyHost"
+                                        }, ":3128\n" ]
+                                    ]
+                                },
+                                "mode": "000644",
+                                "owner": "root",
+                                "group": "root"
+                            }
+                        }
+                    },
+                    "2": {
+                        "commands": {
+                            "sourceprofile": {
+                                "command": "source /etc/profile.d/env.sh",
+                                "cwd": "~"
+                            }
+                        },
+                        "packages": {
+                            "yum": {
+                                "wget": [],
+                                "curl": [],
+                                "vim-enhanced": [],
+                                "ipa-client": [],
+                                "puppet": [],
+                                "unzip": []
+                            }
+                        }
+                    },
+                    "3": {
+                        "sources": {
+                            "/root/": "http://puppetlabs.com/downloads/puppet-enterprise-3.2.2-el-6-x86_64.tar.gz"
+                        },
+                        "files": {
+                            "/root/answers": {
+                                "source": "http://fileserver/answers"
+                            }
+                        },
+                        "services": {
+                            "sysvinit": {
+                                "iptables": {
+                                    "enabled": "false",
+                                    "ensureRunning": "false"
+                                }
+
+                            }
+                        }
+                    }
+                }
+            },
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubNetId"
+                },
+                "InstanceType": "m1.small",
+                "ImageId": {
+                    "Ref": "ImageName"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "SecurityGroups": [
+                    {
+                        "Ref": "PuppetMasterSecurityGroup"
+                    }, "consul-ConsulMasterSecurityGroup-escfha46sa4n"
+                ],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [ "", [
+                            "#!/bin/bash\n",
+                            "# Helper function\n",
+                            "## Initialize CloudFormation bits\n",
+                            "echo '### Running cfn-init please be patient...... Rome was not built in a day'\n",
+                            "/opt/aws/bin/cfn-init -s ", {
+                                "Ref": "AWS::StackName"
+                            }, " -r PuppetMasterInstance", " -c default",
+                            "   --region ", {
+                                "Ref": "AWS::Region"
+                            }, " > /tmp/cfn-init.log 2>&1\n",
+                            "export hostip=`curl -s http://169.254.169.254/latest/meta-data/local-ipv4` ; ",
+                            "export instancehostname=`curl -s http://169.254.169.254/latest/meta-data/hostname | awk -F . '{print$1}'` ; ",
+                            "sed -i '/1.2.3.4/d' /etc/hosts ; ",
+                            "echo \"$hostip $instancehostname.", {
+                                "Ref": "Domain"
+                            }, " $instancehostname\" >> /etc/hosts \n",
+                            "hostname $instancehostname.", {
+                                "Ref": "Domain"
+                            }, "\n",
+                            "sed -i \"s/HOSTNAME=*.*/HOSTNAME=$instancehostname.", {
+                                "Ref": "Domain"
+                            }, "/g\" /etc/sysconfig/network \n",
+                            "sed -i \"s/PUPPET/$instancehostname.", {
+                                "Ref": "Domain"
+                            }, "/g\" /root/answers\n",
+                            "cd /root/puppet-enterprise-3.2.2-el-6-x86_64/ ; ./puppet-enterprise-installer -a /root/answers >& /tmp/pe-install.txt -D\n",
+
+                            "echo 'search openstack, ", {
+                                "Ref": "Domain"
+                            }, "' > /etc/resolv.conf\n",
+                            "echo 'nameserver ", {
+                                "Fn::GetAtt": [ "FreeIPAMasterInstance" , "PrivateIp" ]
+                            }, "' >> /etc/resolv.conf\n",
+
+                            "# Start up the cfn-hup daemon to listen for changes\n",
+                            "#/opt/aws/bin/cfn-hup || error_exit 'Failed to start cfn-hup'\n",
+                            "/opt/aws/bin/cfn-hup\n",
+                            "ipa-client-install --domain `hostname -d` -w Fr33ipa! --mkhomedir --ssh-trust-dns -f -d -p admin@`hostname -d | tr 'a-z' 'A-Z'` --enable-dns-updates -U\n"]]
+                    }
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "Instance name"
+                    },
+                    {
+                        "Key": "Name",
+                        "Value": "example.com",
+                        "PropagateAtLaunch": true
+                    }
+                ]
+            }
+        },
+        "PuppetMasterIPAddress": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "InstanceId": {
+                    "Ref": "PuppetMasterInstance"
+                }
+            }
+        },
+
+        "JenkinsMasterSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Allows ssh connections to the agents",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "22",
+                        "ToPort": "22",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "80",
+                        "ToPort": "80",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "8000",
+                        "ToPort": "8100",
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ]
+            }
+        },
+        "JenkinsMasterInstance": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": [ "FreeIPAMasterInstance", "PuppetMasterInstance" ],
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "bootstrap": [ "1" ],
+                        "all": [ { "ConfigSet": "bootstrap" }, "2", "3" ],
+                        "default": [ { "ConfigSet": "all" } ]
+                    },
+                    "1": {
+                        "files": {
+                            "/etc/puppetlabs/puppet/autosign.conf": {
+                                "content": "*"
+                            },
+                            "/etc/profile.d/visa_env.sh": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "export http_proxy=http://", {
+                                            "Ref": "ProxyHost"
+                                        }, ":3128\n",
+                                        "export https_proxy=http://", {
+                                            "Ref": "ProxyHost"
+                                        }, ":3128\n",
+                                        "export no_proxy='", "*.", {
+                                            "Ref": "Domain"
+                                        }, ",169.254.169.254'\n",
+                                        "export SUDO_FORCE_REMOVE=yes\n" ]
+                                    ]
+                                },
+                                "mode": "000644",
+                                "owner": "root",
+                                "group": "root"
+                            },
+                            "/etc/yum.conf": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "[main]\n",
+                                        "cachedir=/var/cache/yum/$basearch/$releasever\n",
+                                        "keepcache=0\n",
+                                        "debuglevel=2\n",
+                                        "logfile=/var/log/yum.log\n",
+                                        "http_caching=packages\n",
+                                        "exactarch=1\n",
+                                        "obsoletes=1\n",
+                                        "gpgcheck=1\n",
+                                        "plugins=1\n",
+                                        "installonly_limit=3\n",
+                                        "proxy=http://", {
+                                            "Ref": "ProxyHost"
+                                        }, ":3128\n" ]
+                                    ]
+                                },
+                                "mode": "000644",
+                                "owner": "root",
+                                "group": "root"
+                            },
+                            "/etc/yum.repos.d/centos-updates.repo": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "[centos-updates]\n",
+                                        "name=CentOS updates\n",
+                                        "baseurl=http://ftp.heanet.ie/pub/centos/6.5/updates/x86_64/\n",
+                                        "enabled=1\n",
+                                        "gpgcheck=0\n" ]
+                                    ]
+                                }
+                            },
+                            "/etc/yum.repos.d/centos-updates32.repo": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "[centos-updates32]\n",
+                                        "name=CentOS updates\n",
+                                        "baseurl=http://ftp.heanet.ie/pub/centos/6.5/updates/i386/\n",
+                                        "enabled=1\n",
+                                        "gpgcheck=0\n" ]
+                                    ]
+                                }
+                            },
+                            "/etc/yum.repos.d/puppetlabs.repo": {
+                                "content": {
+                                    "Fn::Join": [ "", [
+                                        "[puppetlabs-products]\n",
+                                        "name=Puppet Labs Products El 6 - $basearch\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/products/$basearch\n",
+                                        "enabled=1\n",
+                                        "gpgcheck=0\n",
+
+                                        "[puppetlabs-deps]\n",
+                                        "name=Puppet Labs Dependencies El 6 - $basearch\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/dependencies/$basearch\n",
+                                        "enabled=1\n",
+                                        "gpgcheck=0\n",
+
+                                        "[puppetlabs-devel]\n",
+                                        "name=Puppet Labs Devel El 6 - $basearch\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/devel/$basearch\n",
+                                        "enabled=0\n",
+                                        "gpgcheck=0\n",
+
+                                        "[puppetlabs-products-source]\n",
+                                        "name=Puppet Labs Products El 6 - $basearch - Source\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/products/SRPMS\n",
+                                        "failovermethod=priority\n",
+                                        "enabled=0\n",
+                                        "gpgcheck=0\n",
+
+                                        "[puppetlabs-deps-source]\n",
+                                        "name=Puppet Labs Source Dependencies El 6 - $basearch - Source\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/dependencies/SRPMS\n",
+                                        "enabled=0\n",
+                                        "gpgcheck=0\n",
+
+                                        "[puppetlabs-devel-source]\n",
+                                        "name=Puppet Labs Devel El 6 - $basearch - Source\n",
+                                        "baseurl=http://yum.puppetlabs.com/el/6/devel/SRPMS\n",
+                                        "enabled=0\n",
+                                        "gpgcheck=0\n" ]
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "2": {
+                        "commands": {
+                            "sourceprofile": {
+                                "command": ". /etc/profile.d/env.sh",
+                                "cwd": "~"
+                            }
+                        },
+                        "packages": {
+                            "yum": {
+                                "wget": [],
+                                "curl": [],
+                                "vim-enhanced": [],
+                                "patch": [],
+                                "java-1.6.0-openjdk": [],
+                                "tomcat6": [],
+                                "ipa-client": [],
+                                "puppet": [],
+                                "unzip": []
+                            }
+                        },
+                        "files": {
+                            "/usr/share/tomcat6/webapps/jenkins.war": {
+                                "source": "https://updates.jenkins-ci.org/latest/jenkins.war",
+                                "mode": "000500",
+                                "owner": "tomcat",
+                                "group": "tomcat"
+                            }
+                        }
+                    },
+                    "3": {
+                        "commands": {
+                            "1sourceprofile": {
+                                "command": ". /etc/profile.d/env.sh",
+                                "cwd": "~"
+                            },
+
+                            "2sethosts": {
+                                "command": {
+                                    "Fn::Base64": {
+                                        "Fn::Join": ["", [
+                                            "export hostip=`curl -s http://169.254.169.254/latest/meta-data/local-ipv4` ; ",
+                                            "export instancehostname=`curl -s http://169.254.169.254/latest/meta-data/hostname | awk -F . '{print$1}'` ; ",
+                                            "sed -i '/1.2.3.4/d' /etc/hosts ; ",
+                                            "echo \"$hostip $instancehostname.", {
+                                                "Ref": "Domain"
+                                            }, " $instancehostname\" >> /etc/hosts ; ",
+                                            "hostname $instancehostname.", {
+                                                "Ref": "Domain"
+                                            }, "; ",
+                                            "sed -i \"s/HOSTNAME=*.*/HOSTNAME=$instancehostname.", {
+                                                "Ref": "Domain"
+                                            }, "/g\" /etc/sysconfig/network"
+                                        ]]
+                                    }
+                                },
+                                "cwd": "~"
+                            },
+                            "3consulsetup": {
+                                "command": {
+                                    "Fn::Base64": {
+                                        "Fn::Join": ["", [
+                                            "export hostip=`curl -s http://169.254.169.254/latest/meta-data/local-ipv4`\n",
+                                            "source /etc/profile.d/visa_env.sh\n",
+                                            "test -f consul.zip || wget --output-document=consul.zip https://dl.bintray.com/mitchellh/consul/0.2.0_linux_amd64.zip\n",
+                                            "test -f web_ui.zip || wget --output-document=web_ui.zip https://dl.bintray.com/mitchellh/consul/0.2.0_web_ui.zip\n",
+                                            "test -f /usr/local/bin/detach || wget --output-document=/usr/local/bin/detach http://fileserver/detach && chmod 755 /usr/local/bin/detach\n",
+                                            "test -d /etc/consul.d || mkdir /etc/consul.d\n",
+                                            "test -d /data/consul/ || mkdir -p /data/consul/\n",
+                                            "test -f /data/consul/index.html || unzip web_ui.zip -d /data/consul/\n",
+                                            "test -d /var/lib/consul.d || mkdir /var/lib/consul.d\n",
+                                            "test -x consul || unzip consul.zip\n",
+                                            "test -x /usr/local/bin/consul || sudo cp consul /usr/local/bin/consul\n",
+                                            "sudo chmod +x /usr/local/bin/consul\n",
+                                            "curl -d ",
+                                            "pgrep consul || /usr/local/bin/detach /usr/local/bin/consul agent -bootstrap -server -data-dir=/var/lib/consul.d -dc devops -ui-dir /data/consul/ -client=`curl -s http://169.254.169.254/latest/meta-data/local-ipv4` -bind=`curl -s http://169.254.169.254/latest/meta-data/local-ipv4` -node=consulserver1 -config-dir=/etc/consul.d/ -join="
+                                        ]]
+                                    }
+                                }
+                            }
+                        },
+                        "services": {
+                            "sysvinit": {
+                                "tomcat6": {
+                                    "enabled": "true",
+                                    "ensureRunning": "true"
+                                },
+                                "iptables": {
+                                    "enabled": "false",
+                                    "ensureRunning": "false"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubNetId"
+                },
+                "InstanceType": "m1.small",
+                "ImageId": {
+                    "Ref": "ImageName"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "SecurityGroups": [
+                    {
+                        "Ref": "JenkinsMasterSecurityGroup"
+                    }, "consul-ConsulMasterSecurityGroup-escfha46sa4n"
+                ],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": ["", [
+                            "#!/bin/bash\n",
+
+                            "/opt/aws/bin/cfn-init -s ", {
+                                "Ref": "AWS::StackName"
+                            }, " -r JenkinsMasterInstance", " -c default",
+                            "  --region ", {
+                                "Ref": "AWS::Region"
+                            }, " > /tmp/cfn-init.log 2>&1\n",
+                            "# Start up the cfn-hup daemon to listen for changes\n",
+                            "#/opt/aws/bin/cfn-hup || error_exit 'Failed to start cfn-hup'\n",
+                            "/opt/aws/bin/cfn-hup\n",
+                            "chown -R tomcat:tomcat /usr/share/tomcat6/\n",
+                            "service tomcat6 start\n",
+                            "echo 'search openstack ", {
+                                "Ref": "Domain"
+                            }, "' > /etc/resolv.conf\n",
+                            "echo 'nameserver ", {
+                                "Fn::GetAtt": [ "FreeIPAMasterInstance" , "PrivateIp" ]
+                            }, "' >> /etc/resolv.conf\n",
+                            "while [ ! -e /dev/vdb ]; do echo Waiting for volume to attach; sleep 1; done\n",
+                            "parted -s /dev/vdb mklabel msdos\n",
+                            "parted -s /dev/vdb mkpart primary ext4 1 10000\n",
+                            "# Format the EBS volume and mount it\n",
+                            "mkdir /data\n",
+                            "/sbin/mkfs -t ext4 /dev/vdb1\n",
+                            "mount /dev/vdb1 /data\n",
+                            "chown tomcat:tomcat /data\n",
+                            "ipa-client-install --domain `hostname -d` -w Fr33ipa! --mkhomedir --ssh-trust-dns -f -d -p admin@`hostname -d | tr 'a-z' 'A-Z'` --enable-dns-updates -U"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "JenkinsMasterIPAddress": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "InstanceId": {
+                    "Ref": "JenkinsMasterInstance"
+                }
+            }
+
+        },
+        "JenkinsMasterInstanceVolume": {
+            "Type": "AWS::EC2::Volume",
+            "Properties": {
+                "Size": "50",
+                "AvailabilityZone": {
+                    "Fn::GetAtt": [ "JenkinsMasterInstance", "AvailabilityZone" ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Ref": "AWS::StackName"
+                        }
+                    }
+                ]
+            }
+        },
+        "JenkinsMasterInstanceMountPoint": {
+            "Type": "AWS::EC2::VolumeAttachment",
+            "Properties": {
+                "InstanceId": {
+                    "Ref": "JenkinsMasterInstance"
+                },
+                "VolumeId": {
+                    "Ref": "JenkinsMasterInstanceVolume"
+                },
+                "Device": "/dev/vdb"
+            }
+        }
+
+    },
+    "Outputs": {
+        "PuppetMasterPublicDnsName": {
+            "Value": {
+                "Fn::GetAtt": [
+                    "PuppetMasterInstance",
+                    "PublicDnsName"
+                ]
+            }
+        },
+        "FreeIPAMasterPublicDnsName": {
+            "Value": {
+                "Fn::GetAtt": [
+                    "FreeIPAMasterInstance",
+                    "PublicDnsName"
+                ]
+            }
+        },
+        "PuppetMasterPrivateDnsName": {
+            "Value": {
+                "Fn::GetAtt": [
+                    "PuppetMasterInstance",
+                    "PrivateDnsName"
+                ]
+            }
+        }
+    }
+}

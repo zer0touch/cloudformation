@@ -1,0 +1,162 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "CoreOS on openstack",
+  "Parameters": {
+    "DiscoveryURL": {
+      "Description": "An unique etcd cluster discovery URL. Grab a new token from https://discovery.etcd.io/new",
+      "Type": "String",
+      "Default": "http://discovery.example.com:8087/blah235"
+    },
+    "ClusterSize": {
+      "Description": "The size of the cluster",
+      "Type": "String",
+      "Default": "3"
+    },
+    "AdvertisedIPAddress": {
+      "Description": "Use 'private' if your etcd cluster is within one region or 'public' if it spans regions or cloud providers.",
+      "Default": "private",
+      "AllowedValues": ["private", "public"],
+      "Type": "String"
+    },
+    "KeyName": {
+      "Description": "Name of aws keypair to be used",
+      "Type": "String",
+      "Default": "devopsadmin"
+    },
+    "ProxyHost": {
+      "Type": "String",
+      "Description": "The Proxy host that you require, this will be abstracted to a map function",
+      "Default": "192.168.1.1"
+    },
+    "Domain": {
+      "Type": "String",
+      "Description": "The domain for which you are deploying",
+      "Default": "example.com"
+    },
+    "Environment": {
+      "Type": "String",
+      "Description": "The Environment name for this stack",
+      "Default": "devops"
+    },
+    "ExtNetUuid": {
+      "Type": "String",
+      "Description": "The external id for the public subnet",
+      "Default": "####-####-####-#####"
+    },
+    "PrivateSubNetId": {
+      "Type": "String",
+      "Description": "The external subnet id for the public subnet",
+      "Default": "####-####-####-#####"
+   },
+   "PrivateSubNetId": {
+      "Type": "String",
+      "Description": "The external subnet id for the public subnet",
+      "Default": "####-####-####-#####"
+    },
+    "ImageName": {
+      "Type": "String",
+      "Description": "The name of the image you would like to use",
+      "Default": "CoreOS-Alpha"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Description": "The name of the image you would like to use",
+      "Default": "m1.small"
+    },
+    "ConsulUrl": {
+      "Type": "String",
+      "Description": "The name of the image you would like to use",
+      "Default": "https://dl.bintray.com/mitchellh/consul/0.1.0_linux_amd64.zip"
+    },
+    "BuildNumber" : {
+      "Type" : "String",
+      "Default": "1"
+    }
+  },
+
+
+  "Resources": {
+    "CoreOSSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "CoreOS SecurityGroup",
+        "SecurityGroupIngress": [
+          {"IpProtocol": "tcp", "FromPort": "1", "ToPort": "65535", "CidrIp": "0.0.0.0/0"},
+          {"IpProtocol": "udp", "FromPort": "1", "ToPort": "65535", "CidrIp": "0.0.0.0/0"}
+        ]
+      }
+    },
+
+    "CoreOSMasterServer": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "InstanceType": {"Ref": "InstanceType" },
+        "ImageId": { "Ref": "ImageName" },
+        "KeyName": { "Ref": "KeyName" },
+        "SecurityGroups": [{"Ref": "CoreOSSecurityGroup"}],
+        "UserData" : { "Fn::Base64":
+          { "Fn::Join": [ "", [
+            "#cloud-config\n\n",
+            "coreos:\n",
+            "  etcd:\n",
+            "    discovery: ", { "Ref": "DiscoveryURL" }, "\n",
+            "    addr: $", { "Ref": "AdvertisedIPAddress" }, "_ipv4:4001\n",
+            "    peer-addr: $", { "Ref": "AdvertisedIPAddress" }, "_ipv4:7001\n",
+            "  units:\n",
+            "    - name: etcd.service\n",
+            "      command: start\n",
+            "    - name: fleet.service\n",
+            "      command: start\n"
+            ] ]
+          }
+        }
+      }
+    },
+
+    "CoreOSMasterServerIPAddress": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "InstanceId": { "Ref": "CoreOSMasterServer" }
+      }
+    },
+
+    "CoreOSServerAutoScale": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "AvailabilityZones": [ "nova" ] ,
+        "LaunchConfigurationName": {"Ref": "CoreOSServerLaunchConfig"},
+        "MinSize": "3",
+        "MaxSize": "4",
+        "DesiredCapacity": {"Ref": "ClusterSize"},
+        "Tags": [
+            {"Key": "Name", "Value": { "Ref" : "AWS::StackName" }, "PropagateAtLaunch": true}
+        ]
+      }
+    },
+    "CoreOSServerLaunchConfig": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Properties": {
+        "ImageId" :  {"Ref": "ImageName"},
+        "InstanceType": {"Ref": "InstanceType" },
+        "KeyName": {"Ref": "KeyName"},
+        "SecurityGroups": [{"Ref": "CoreOSSecurityGroup"}],
+        "UserData" : { "Fn::Base64":
+          { "Fn::Join": [ "", [
+            "#cloud-config\n\n",
+            "coreos:\n",
+            "  etcd:\n",
+            "    discovery: ", { "Ref": "DiscoveryURL" }, "\n",
+            "    addr: $", { "Ref": "AdvertisedIPAddress" }, "_ipv4:4001\n",
+            "    peer-addr: $", { "Ref": "AdvertisedIPAddress" }, "_ipv4:7001\n",
+            "  units:\n",
+            "    - name: etcd.service\n",
+            "      command: start\n",
+            "    - name: fleet.service\n",
+            "      command: start\n"
+            ] ]
+          }
+        }
+      }
+    }
+  }
+}
