@@ -1,5 +1,6 @@
 Cloudformation
 ======
+[![Build Status](https://travis-ci.org/zer0touch/cloudformation.svg?branch=master)](https://travis-ci.org/zer0touch/cloudformation)
 
 Couple of cloud formation templates that I have used over the years
 
